@@ -1,6 +1,7 @@
 # REF  := MMult_cuBLAS_1
 REF  := REF_MMult
-NEW := 01_naive
+NEW := 00_cublas
+# NEW := 01_naive
 SMS ?= 86
 BUILD_DIR := build
 
@@ -42,7 +43,7 @@ $(BUILD_DIR)/test_sgemm.x: $(TEST_OBJS) $(UTIL)
 
 run:
 	make all
-	./$(BUILD_DIR)/test_sgemm.x
+	./$(BUILD_DIR)/test_sgemm.x > logs/$(NEW).log
 
 
 clean:
