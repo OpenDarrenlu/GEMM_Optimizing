@@ -1,7 +1,11 @@
 # REF  := MMult_cuBLAS_1
 REF  := REF_MMult
-NEW := 00_cublas
+# NEW := 00_cublas
 # NEW := 01_naive
+# NEW := 02_smem
+# NEW := 03_stride
+# NEW := 04_align
+NEW := 05_transposeLd
 SMS ?= 86
 BUILD_DIR := build
 
