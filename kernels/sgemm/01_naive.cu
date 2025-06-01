@@ -15,7 +15,7 @@ __global__ void sgemm(int m, int n, int k, float *a, int lda, float *b, int ldb,
                       float *c, int ldc) {
   int _m = blockIdx.x * BLOCK + threadIdx.x;
   int _n = blockIdx.y * BLOCK + threadIdx.y;
-  if (_m < m and _n < n) {
+  if (_m < m && _n < n) {
     float sum = 0.f;
     for (int i = 0; i < k; ++i) {
       sum += a[_m * k + i] * b[i * n + _n];

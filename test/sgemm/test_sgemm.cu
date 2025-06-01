@@ -59,7 +59,6 @@ int main() {
     m = (M == -1 ? p : M);
     n = (N == -1 ? p : N);
     k = (K == -1 ? p : K);
-
     gflops = 2.0 * m * n * k * 1.0e-09;
 
     const int lda = k, ldb = n, ldc = n;
@@ -77,9 +76,9 @@ int main() {
     cref = (float *)malloc(mem_size_C);
 
     /* Generate random matrices A, B, Cold */
-    random_matrix(m, k, a, m);
-    random_matrix(k, n, b, k);
-    random_matrix(m, n, cold, n);
+    random_matrix(m, k, a, lda);
+    random_matrix(k, n, b, ldb);
+    random_matrix(m, n, cold, ldc);
     memset(cold, 0, mem_size_C);
     memset(cref, 0, mem_size_C);
 

@@ -112,7 +112,7 @@ void MY_MMult(cublasHandle_t handle, int m, int n, int k, float *d_A, int lda,
               float *d_B, int ldb, float *d_C, int ldc) {
 
   constexpr int BLOCK = 128;
-  dim3 grid((m + BLOCK - 1) / BLOCK, (n + BLOCK - 1) / BLOCK);
+  dim3 grid((n + BLOCK - 1) / BLOCK, (m + BLOCK - 1) / BLOCK);
 
   sgemm_128x128x8<<<grid, 256>>>(m, n, k, d_A, d_B, d_C);
 }

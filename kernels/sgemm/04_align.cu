@@ -65,7 +65,7 @@ void MY_MMult(cublasHandle_t handle, int m, int n, int k, float *d_A, int lda,
   constexpr int BLOCK = 8;
   constexpr int STRIDE = 4; // every thread calc STRIDExSTRIDE result
   dim3 block(BLOCK, BLOCK);
-  dim3 grid((m + BLOCK - 1) / BLOCK / STRIDE, (n + BLOCK - 1) / BLOCK / STRIDE);
+  dim3 grid((n + BLOCK - 1) / BLOCK / STRIDE, (m + BLOCK - 1) / BLOCK / STRIDE);
 
   sgemm<BLOCK, STRIDE><<<grid, block>>>(m, n, k, d_A, lda, d_B, ldb, d_C, ldc);
 }
