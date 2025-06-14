@@ -20,7 +20,8 @@
  * i+32, i+64, i+96]
  *
  */
-__global__ __launch_bounds__(256, 2) void sgemm_128x128x8(int m, int n, int k,
+template <int BLOCK>
+__global__ __launch_bounds__(256, 2) void sgemm_BLOCKxBLOCKx8(int m, int n, int k,
                                                           const float *a,
                                                           const float *b,
                                                           float *c) {
@@ -33,8 +34,8 @@ __global__ __launch_bounds__(256, 2) void sgemm_128x128x8(int m, int n, int k,
   float sum[8][8] = {0};
   float panelA[8] = {0}, panelB[8] = {0};
 
-  int from_a = (blockIdx.y * 128 + threadIdx.x / 8 * 4) * k + threadIdx.x % 8;
-  int from_b = (threadIdx.x / 32) * n + blockIdx.x * 128 + threadIdx.x % 32;
+  int from_a = (blockIdx.y * BLOCK + threadIdx.x / 8 * 4) * k + threadIdx.x % 8;
+  int from_b = (threadIdx.x / 32) * n + blockIdx.x * BLOCK + threadIdx.x % 32;
 
   for (int loop = 0; loop < k; loop += 8) {
     // part1: gmem to smem
@@ -92,8 +93,8 @@ __global__ __launch_bounds__(256, 2) void sgemm_128x128x8(int m, int n, int k,
   }
 
   // part3: save to C
-  int write_offset = (blockIdx.y * 128 + (threadIdx.x / 16) * 4) * n +
-                     blockIdx.x * 128 + (threadIdx.x % 16) * 4;
+  int write_offset = (blockIdx.y * BLOCK + (threadIdx.x / 16) * 4) * n +
+                     blockIdx.x * BLOCK + (threadIdx.x % 16) * 4;
 #pragma unroll
   for (int i = 0; i < 4; ++i) {
     for (int j = 0; j < 4; ++j) {
@@ -114,5 +115,5 @@ void MY_MMult(cublasHandle_t handle, int m, int n, int k, float *d_A, int lda,
   constexpr int BLOCK = 128;
   dim3 grid((n + BLOCK - 1) / BLOCK, (m + BLOCK - 1) / BLOCK);
 
-  sgemm_128x128x8<<<grid, 256>>>(m, n, k, d_A, d_B, d_C);
+  sgemm_BLOCKxBLOCKx8<BLOCK><<<grid, (BLOCK<<1)>>>(m, n, k, d_A, d_B, d_C);
 }

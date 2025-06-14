@@ -124,7 +124,7 @@ int main() {
       printf("diff too big !\n");
       exit(-1);
     }
-    printf("M/N/K = %d, gflops = %.2f, diff = %le \n", p, gflops, diff);
+    printf("M=%d,N=%d,K=%d, gflops = %.2f, diff = %le \n", M,N,K, gflops, diff);
 
     free(a);
     free(b);
