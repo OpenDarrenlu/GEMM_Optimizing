@@ -6,7 +6,8 @@ REF  := REF_MMult
 # NEW := 03_stride
 # NEW := 04_align
 # NEW := 05_transposeLd
-NEW := 06_ptxPingpong
+NEW := 06_pingpong
+# NEW := 06_ptxPingpong
 SMS ?= 86
 BUILD_DIR := build
 
