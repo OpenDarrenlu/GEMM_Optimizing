@@ -1,0 +1,5 @@
+GPU Device 0: "NVIDIA GeForce RTX 3050 Laptop GPU" with compute capability 8.6
+
+MY_MMult = [
+M=512,N=1024,K=2048, gflops = 4033.98, diff = 1.220703e-04 
+];

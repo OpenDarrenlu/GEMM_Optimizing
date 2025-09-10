@@ -1,13 +1,14 @@
-# REF  := MMult_cuBLAS_1
-REF  := REF_MMult
+REF  := MMult_cuBLAS_2
+# REF  := REF_MMult
 # NEW := 00_cublas
 # NEW := 01_naive
 # NEW := 02_smem
 # NEW := 03_stride
 # NEW := 04_align
 # NEW := 05_transposeLd
-NEW := 06_pingpong
+# NEW := 06_pingpong
 # NEW := 06_ptxPingpong
+NEW := 07_wmma_naive
 SMS ?= 86
 BUILD_DIR := build
 
@@ -19,18 +20,13 @@ $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_
 CFLAGS     := -std=c++17 -O2 -Itest/utils
 LDFLAGS    := -lm  -lcublas -lopenblas
 
-UTIL       := $(addprefix $(BUILD_DIR)/, copy_matrix.o \
-              compare_matrices.o \
-              random_matrix.o \
-              print_matrix.o)
-
-TEST_OBJS  := $(addprefix $(BUILD_DIR)/, test_sgemm.o $(NEW).o $(REF).o)
+TEST_OBJS  := $(addprefix $(BUILD_DIR)/, test_gemm.o $(NEW).o $(REF).o)
 
 
-$(BUILD_DIR)/%.o: test/sgemm/%.cpp
+$(BUILD_DIR)/%.o: test/gemm/%.cpp
 	$(CC) $(CFLAGS) $(GENCODE_FLAGS)  -c $< -o $@
 	
-$(BUILD_DIR)/%.o: test/sgemm/%.cu 
+$(BUILD_DIR)/%.o: test/gemm/%.cu
 	$(CC) $(CFLAGS) $(GENCODE_FLAGS)  -c $< -o $@
 
 $(BUILD_DIR)/%.o: test/utils/%.cpp
@@ -39,17 +35,20 @@ $(BUILD_DIR)/%.o: test/utils/%.cpp
 $(BUILD_DIR)/%.o: kernels/sgemm/%.cu
 	$(CC) $(CFLAGS) $(GENCODE_FLAGS)  -c $< -o $@
 
+$(BUILD_DIR)/%.o: kernels/hgemm/%.cu
+	$(CC) $(CFLAGS) $(GENCODE_FLAGS)  -c $< -o $@
+
 all:
 	make clean
-	make $(BUILD_DIR)/test_sgemm.x
+	make $(BUILD_DIR)/test_gemm.x
 
-$(BUILD_DIR)/test_sgemm.x: $(TEST_OBJS) $(UTIL)
-	$(LINKER) $(TEST_OBJS) $(UTIL) $(LDFLAGS) \
+$(BUILD_DIR)/test_gemm.x: $(TEST_OBJS) 
+	$(LINKER) $(TEST_OBJS)  $(LDFLAGS) \
         -o  $@ 
 
 run:
 	make all
-	./$(BUILD_DIR)/test_sgemm.x > logs/$(NEW).log
+	./$(BUILD_DIR)/test_gemm.x > logs/$(NEW).log
 
 
 clean:

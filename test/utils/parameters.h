@@ -12,10 +12,13 @@ values.  If the value equals "-1" then that dimension is bound to the
 index p, given above.
 */
 
-#define M 512
-#define N 1024
-#define K 2048
+// #define M 512
+// #define N 1024
+// #define K 2048
 
+#define M 16
+#define N 16
+#define K 16
 /* 
 In the test driver, each experiment is repeated NREPEATS times and
 the best time from these repeats is used to compute the performance

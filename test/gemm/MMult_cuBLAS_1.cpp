@@ -7,9 +7,10 @@
 #include <cuda_runtime.h>
 
 // CUDA and CUBLAS functions
-
-void CUBLAS_MMult(cublasHandle_t handle, int m, int n, int k, float *d_A, int lda,
-              float *d_B, int ldb, float *d_C, int ldc) {
+// 泛型版本，支持 float 和 half
+template <typename T>
+void CUBLAS_MMult(cublasHandle_t handle, int m, int n, int k, T *d_A, int lda,
+              T *d_B, int ldb, T *d_C, int ldc) {
 
   const float alpha = 1.0f;
   const float beta = 0.0f;

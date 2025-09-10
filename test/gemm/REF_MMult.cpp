@@ -6,8 +6,10 @@
 #include <cblas.h>
 /* Routine for computing C = A * B + C */
 
-void REF_MMult(int m, int n, int k, float *a, int lda, float *b, int ldb,
-               float *c, int ldc) {
+// 泛型版本，支持 float 和 half
+template <typename T>
+void REF_MMult(int m, int n, int k, T *a, int lda, T *b, int ldb,
+               T *c, int ldc) {
   cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0f, a, lda,
               b, ldb, 0.0f, c, ldc);
 }

@@ -1,0 +1,5 @@
+[float] GPU Device 0: "NVIDIA GeForce RTX 3050 Laptop GPU" with compute capability 8.6
+
+[float] MY_MMult = [
+M=512,N=1024,K=2048, gflops = 4164.01, diff = 1.335144e-04 
+[float] ];
