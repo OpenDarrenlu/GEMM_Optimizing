@@ -8,7 +8,8 @@ REF  := MMult_cuBLAS_2
 # NEW := 05_transposeLd
 # NEW := 06_pingpong
 # NEW := 06_ptxPingpong
-NEW := 07_wmma_naive
+# NEW := 07_wmma_naive
+NEW := 08_cute_simple
 SMS ?= 86
 BUILD_DIR := build
 
@@ -17,8 +18,8 @@ LINKER     := $(CC)
 #CFLAGS     := -O0 -g -Wall
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 # CFLAGS     := -std=c++17 -O0 -g -G
-CFLAGS     := -std=c++17 -O2 -Itest/utils
-LDFLAGS    := -lm  -lcublas -lopenblas
+CFLAGS     := -std=c++17 -O2 -Itest/utils -I${CUTLASS_ROOT}/include
+LDFLAGS    := -lm  -lcublas -lopenblas -lcublasLt
 
 TEST_OBJS  := $(addprefix $(BUILD_DIR)/, test_gemm.o $(NEW).o $(REF).o)
 
