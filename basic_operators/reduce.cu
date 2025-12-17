@@ -30,10 +30,11 @@ void reduce_2dim_cpu(float* input, float* output, int M, int N){
 // dim3 block(256);
 // dim3 grid(CEIL(N, 256));
 //✅ 10.15
+template<int BLOCK_SIZE>
 __global__ void reduce_1dim(float* input, float* output, int N){
     const int warpId = threadIdx.x / warpSize;
     const int laneId = threadIdx.x % warpSize;
-    const int warpNum = blockDim.x / warpSize;
+    const int warpNum = BLOCK_SIZE >> 5;
     const int tid = blockIdx.x * blockDim.x + threadIdx.x;
     float val = (tid < N)? input[tid] : 0.0f;
 
@@ -61,6 +62,7 @@ void test_1dim(){
     float *d_input, *d_output;
     h_input = (float*)malloc(N * sizeof(float));
     h_output = (float*)malloc(sizeof(float));
+    h_output[0] = 0.0f;
     h_output_reduce = (float*)malloc(sizeof(float));
   
     for (int i = 0; i < N; i++) {
@@ -71,11 +73,12 @@ void test_1dim(){
     cudaMalloc(&d_input, N * sizeof(float));
     cudaMalloc(&d_output, sizeof(float));
     cudaMemcpy(d_input, h_input, N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemset(d_output, 0, sizeof(float));
     
-
-    dim3 block(256);
-    dim3 grid(CEIL(N, 256));
-    reduce_1dim<<<grid, block>>>(d_input, d_output, N);
+    const int BLOCK_SIZE = 256;
+    dim3 block(BLOCK_SIZE);
+    dim3 grid(CEIL(N, BLOCK_SIZE));
+    reduce_1dim<BLOCK_SIZE><<<grid, block>>>(d_input, d_output, N);
     cudaMemcpy(h_output_reduce, d_output, sizeof(float), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
 
@@ -93,31 +96,43 @@ void test_1dim(){
 // dim3 block(32);
 // dim3 grid(M);
 //✅ 10.15
+template<int BLOCK_SIZE>
 __global__ void reduce_2dim(float *input, float *output, int M, int N){
     const int lane_idx = threadIdx.x % warpSize;
+    const int warpId = threadIdx.x / warpSize;
     // const int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    const int partion = CEIL(N, blockDim.x );
+    // const int partion = CEIL(N, blockDim.x );
+    const int WarpNum = BLOCK_SIZE >> 5;
     if(blockIdx.x >= M) return ;
-    __shared__ float sum_per_block ;
+    __shared__ float sum_per_warp[WarpNum] ;
     // float sum_per_block = 0.0f;//错误的写法，这样每个thread都会执行output[blockIdx.x] = sum_per_block;但是只有thread0的是对的
 
     float val = 0.0f;
 
-    for(int i = 0; i < partion ; i++){
-        int col = i * blockDim.x  + threadIdx.x;
-        val += (col < N)? (input[blockIdx.x * N + col]):0.0f;
+    for(int i = threadIdx.x; i < N ; i+=BLOCK_SIZE){
+        int offset = i + blockIdx.x * N;
+        val += input[offset];
     }
 
-    //warp内规约
     for(int offset = warpSize >> 1; offset > 0; offset >>= 1){
         val += __shfl_down_sync(0xffffffff, val, offset);
     }
-    if(lane_idx == 0) sum_per_block = val;
-    output[blockIdx.x] = sum_per_block;
+    if(lane_idx == 0) sum_per_warp[warpId] = val;
+    __syncthreads();
+
+    //warp内规约
+    if(warpId == 0){
+        val = (lane_idx < WarpNum)? sum_per_warp[lane_idx] : 0.0f;
+        for(int offset = warpSize >> 1; offset > 0; offset >>= 1){
+            val += __shfl_down_sync(0xffffffff, val, offset);
+        }
+        if(lane_idx == 0) output[blockIdx.x] = val;
+    }
 }
 // dim3 block(256);
 // dim3 grid(M);
 //✅ 10.15
+template<int BLOCK_SIZE>
 __global__ void reduce_2dim_v2(float *input, float *output, int M, int N){
     const int lane_idx = threadIdx.x % warpSize;
     const int warp_idx = threadIdx.x / warpSize;
@@ -158,7 +173,7 @@ void test_2dim(){
     h_output = (float*)malloc(M * sizeof(float));
     output = (float*)malloc(M * sizeof(float));
     for(int i = 0 ; i < N * M ; i++){
-        h_input[i] = 1;
+        h_input[i] = rand() % 1000;
     }
 
     reduce_2dim_cpu(h_input, h_output, M, N);
@@ -167,11 +182,13 @@ void test_2dim(){
     cudaMalloc(&d_output, M * sizeof(float));
     cudaMemcpy(d_input, h_input, M * N* sizeof(float), cudaMemcpyHostToDevice);
 
-    dim3 block(32);
+    const int BLOCK_SIZE = 256;
+    dim3 block(BLOCK_SIZE);
     dim3 grid(M);
-    reduce_2dim<<<grid, block>>>(d_input, d_output, M, N);
+    reduce_2dim<BLOCK_SIZE><<<grid, block>>>(d_input, d_output, M, N);
     cudaMemcpy(output, d_output, M * sizeof(float), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
+    printf("%f\n", TIME_RECORD(100, ([&]{reduce_2dim<BLOCK_SIZE><<<grid, block>>>(d_input, d_output, M, N);})));
 
 
     verify_matrix(h_output, output, M);
@@ -190,7 +207,7 @@ void test_2dim_v2(){
     h_output = (float*)malloc(M * sizeof(float));
     output = (float*)malloc(M * sizeof(float));
     for(int i = 0 ; i < N * M ; i++){
-        h_input[i] = 1;
+        h_input[i] = rand() % 1000;
     }
 
     reduce_2dim_cpu(h_input, h_output, M, N);
@@ -199,11 +216,13 @@ void test_2dim_v2(){
     cudaMalloc(&d_output, M * sizeof(float));
     cudaMemcpy(d_input, h_input, M * N* sizeof(float), cudaMemcpyHostToDevice);
 
-    dim3 block(256);
+    const int BLOCK_SIZE = 256;
+    dim3 block(BLOCK_SIZE);
     dim3 grid(M);
-    reduce_2dim_v2<<<grid, block>>>(d_input, d_output, M, N);
+    reduce_2dim_v2<BLOCK_SIZE><<<grid, block>>>(d_input, d_output, M, N);
     cudaMemcpy(output, d_output, M * sizeof(float), cudaMemcpyDeviceToHost);
     cudaDeviceSynchronize();
+    printf("%f\n", TIME_RECORD(100, ([&]{reduce_2dim_v2<BLOCK_SIZE><<<grid, block>>>(d_input, d_output, M, N);})));
 
 
     verify_matrix(h_output, output, M);
