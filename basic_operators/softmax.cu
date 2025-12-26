@@ -37,11 +37,11 @@ void softmax_1dim_cpu(float *input, float *output, int N){
     }
     printf("exp_sum: %f\n", exp_sum);
 
-    float exp_sum_inverse = 0.0f;
-    for(int i = N-1; i >= 0 ; i--){
-        exp_sum_inverse += exp(input[i] - max);
-    }
-    printf("exp_sum_inverse: %f\n", exp_sum_inverse);
+    // float exp_sum_inverse = 0.0f;
+    // for(int i = N-1; i >= 0 ; i--){
+    //     exp_sum_inverse += exp(input[i] - max);
+    // }
+    // printf("exp_sum_inverse: %f\n", exp_sum_inverse);
     //softmax
     for(int i = 0 ; i < N ; i++){
         output[i] = exp(input[i] - max) / exp_sum;
@@ -366,6 +366,7 @@ void test_2dim_softmax(){
     softmax_2dim<<<grid, block>>>(d_input, d_output, M, N);
     cudaMemcpy(h_output_gpu, d_output, M * N * sizeof(float), cudaMemcpyDeviceToHost);
     verify_matrix(h_output, h_output_gpu, M * N);
+    printf("%f\n", TIME_RECORD(100, ([&]{softmax_2dim<<<grid, block>>>(d_input, d_output, M, N);})));
 
 }
 
@@ -398,6 +399,7 @@ void test_2dim_softmax_v2(){
     softmax_2dim_v2<<<grid, block>>>(d_input, d_output, M, N);
     cudaMemcpy(h_output_gpu, d_output, M * N * sizeof(float), cudaMemcpyDeviceToHost);
     verify_matrix(h_output, h_output_gpu, M * N);
+    printf("%f\n", TIME_RECORD(100, ([&]{softmax_2dim_v2<<<grid, block>>>(d_input, d_output, M, N);})));
 
 }
 

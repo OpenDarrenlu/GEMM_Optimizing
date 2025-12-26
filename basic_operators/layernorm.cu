@@ -75,10 +75,11 @@ void layer_norm_3dim_cpu(float *input, float *output, int batch_size, int seq_le
 }
 
 //dim3 block(256);
-//dim3 gird(batch_size, seq_len);
+//dim3 gird(seq_len, batch_size);
 __global__ void layernorm_3dim(float *input, float *output, int batch_size, int seq_len, int hidden_size, float *gamma, float *beta){
     // const index = i * seq_len * hidden_size + j * hidden_size;
-    const int start_index = blockIdx.x * seq_len * hidden_size + blockIdx.y * hidden_size;
+    // const int start_index = blockIdx.x * seq_len * hidden_size + blockIdx.y * hidden_size;
+    const int start_index = blockIdx.y * seq_len * hidden_size + blockIdx.x * hidden_size;
     const int warp_id =  threadIdx.x / warpSize;
     const int lane_id = threadIdx.x % warpSize;
     const int warp_num = blockDim.x / warpSize;
@@ -130,12 +131,16 @@ __global__ void layernorm_3dim(float *input, float *output, int batch_size, int 
         }
         if(lane_id==0) sm_var[0]= var/hidden_size;
     }
-    __syncthreads();        
+    __syncthreads();
 
 
     //3. 标准化 + 缩放偏移（仿射变换）
-    for(int i = 0 ; i < hidden_size ; i++ ){
-        output[start_index + i] = (input[start_index + i] - sm_sum[0]) / sqrtf(sm_var[0] + eps) * gamma[i] + beta[i];
+    // for(int i = 0 ; i < hidden_size ; i++ ){
+    //     output[start_index + i] = (input[start_index + i] - sm_sum[0]) / sqrtf(sm_var[0] + eps) * gamma[i] + beta[i];
+    // }
+    for(int i = 0 ; i <  partion; i++){
+        int col = i * blockDim.x + threadIdx.x;
+        output[start_index + col] = (input[start_index + col] - sm_sum[0]) / sqrtf(sm_var[0] + eps) * gamma[col] + beta[col];
     }
 
 }
@@ -202,8 +207,12 @@ __global__ void layernorm_2dim(float *input, float *output, int seq_len, int hid
     // }
 
     //3. 标准化 + 缩放偏移（仿射变换）
-    for(int i = 0 ;i < hidden_size ;i ++){
-        output[i + blockIdx.x * hidden_size] = (input[i + blockIdx.x * hidden_size] - sm_sum[0]) / sqrtf(sm_var[0] + eps) * gamma[i] + beta[i];
+    // for(int i = 0 ;i < hidden_size ;i ++){
+    //     output[i + blockIdx.x * hidden_size] = (input[i + blockIdx.x * hidden_size] - sm_sum[0]) / sqrtf(sm_var[0] + eps) * gamma[i] + beta[i];
+    // }
+    for(int i = 0 ; i <  partion; i++){
+        int col = i * blockDim.x + threadIdx.x;
+        output[blockIdx.x * hidden_size + col] = (input[blockIdx.x * hidden_size + col] - sm_sum[0]) / sqrtf(sm_var[0] + eps) * gamma[col] + beta[col];
     }
 }
 
@@ -222,7 +231,7 @@ void test_layer_norm_2dim(){
     h_beta = (float *)malloc(hidden_size * sizeof(float));
     for(int i = 0; i < seq_len * hidden_size; i++){
         h_input[i] = (float)rand() / RAND_MAX;
-    }   
+    }
     for(int i = 0; i < hidden_size; i++){
         h_gamma[i] = (float)rand() / RAND_MAX;
         h_beta[i] = (float)rand() / RAND_MAX;
@@ -249,6 +258,7 @@ void test_layer_norm_2dim(){
         printf("CUDA error: %s\n", cudaGetErrorString(err));
     }
     cudaMemcpy(h_output_gpu, d_output, seq_len * hidden_size * sizeof(float), cudaMemcpyDeviceToHost);
+    printf("%f\n", TIME_RECORD(100, ([&]{layernorm_2dim<<<grid, block>>>(d_input, d_output, seq_len, hidden_size, d_gamma, d_beta);})));
 
 
     verify_matrix(h_output, h_output_gpu, seq_len*hidden_size);
@@ -294,9 +304,11 @@ void test_layer_norm_3dim(){
     cudaMemcpy(d_beta, h_beta, hidden_size * sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_input, h_input, batch_size * seq_len * hidden_size * sizeof(float), cudaMemcpyHostToDevice);
     dim3  block(256);
-    dim3  grid(batch_size, seq_len);
+    dim3  grid(seq_len, batch_size);
     layernorm_3dim<<<grid, block>>>(d_input, d_output, batch_size, seq_len, hidden_size, d_gamma, d_beta);
     cudaDeviceSynchronize();  
+    printf("%f\n", TIME_RECORD(100, ([&]{layernorm_3dim<<<grid, block>>>(d_input, d_output, batch_size, seq_len, hidden_size, d_gamma, d_beta);})));
+
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
         printf("CUDA error: %s\n", cudaGetErrorString(err));

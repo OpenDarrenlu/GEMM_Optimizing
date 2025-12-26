@@ -95,6 +95,7 @@ __global__ void device_transpose_v3(float *d_input, float *d_output3, const int 
     }
 }
 // 使用共享内存中转，合并读取+写入，使用swizzling解决bank conflict
+// https://melonedo.github.io/2025/08/04/Swizzle-Layout-Explained.html
 template<const int BLOCK_SIZE>
 __global__ void device_transpose_v4(float *d_input, float *d_output4, const int M, const int N){
     __shared__ float s[BLOCK_SIZE][BLOCK_SIZE];

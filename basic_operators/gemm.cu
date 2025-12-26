@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 #include <iostream>
 #include <vector>
+#include <utils.cuh>
 #define CEIL(a, b) ((a + b - 1) / b)
 #define warpsize 32
 
@@ -24,7 +25,7 @@ __global__ void gemm_block_tile(float *A, float *B, float *C, int N, int M, int 
     float tmp = 0.0f;
     for(int k = 0 ;k  < K; k += BK){
         //缓存A-tile 和B-tile
-        As[threadIdx.y * BK + threadIdx.x] = A[threadIdx.y * K + threaxIdx.x];
+        As[threadIdx.y * BK + threadIdx.x] = A[threadIdx.y * K + threadIdx.x];
         Bs[threadIdx.x * BN + threadIdx.x] = B[threadIdx.y * N + threadIdx.x];
         __syncthreads();
         A += BK;
@@ -86,82 +87,57 @@ __global__ void sgemm_v2(int M, int N, int K, float alpha, float *A, float *B, f
 
 
 // template __global__ void sgemm_v4<128, 128, 8, 8, 8>(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C);
+// Grid：(CEIL(N, BN), CEIL(M, BM))
+// Block：(CEIL(BN, TN), CEIL(BM, TM))
 template<const int BM,
          const int BN,
          const int BK,
          const int TM,
          const int TN>
 __global__ void sgemm_v4(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C) {
-    int bx = blockIdx.x;
-    int by = blockIdx.y;
+    int bm = blockIdx.y;
+    int bn = blockIdx.x;
 
-    int block_row_thread = BN / TN;
-    int block_col_thread = BM / TM;
-    int thread_num = block_row_thread * block_col_thread; // 一个线程负责计算block中TM*TN个元素
+    int tm = threadIdx.y;
+    int tn = threadIdx.x;
 
-    int tx = (threadIdx.x % block_row_thread) * TN;
-    int ty = (threadIdx.x / block_row_thread) * TM;
 
     __shared__ float As[BM * BK];
     __shared__ float Bs[BK * BN];
 
     // 移动到当前block
-    A = &A[by * BM * K];
-    B = &B[bx * BN];
-    C = &C[by * BM * N + bx * BN];
-
-    /*
-    当前线程负责搬运全局内存中第a_tile_row行，第a_tile_col列元素至共享内存第a_tile_row行，第a_tile_col列
-    a_tile_stride表示block中线程总共可搬运a_tile_stride行至共享内存；
-
-    若BM=64,BK=8,thread_num=512,则a_tile_stride=64,a_tile_stride=BM，表示每个线程搬运一轮即可完成所需元素的搬运;
-    若BM=128,BK=8,thread_num=512,则a_tile_stride=64,表示每个线程搬运两轮即可完成所需元素的搬运;
-    */
-    int a_tile_row = threadIdx.x / BK;
-    int a_tile_col = threadIdx.x % BK;
-    int a_tile_stride = thread_num / BK;
-
-    int b_tile_row = threadIdx.x / BN;
-    int b_tile_col = threadIdx.x % BN;
-    int b_tile_stride = thread_num / BN;
-
-    float tmp[TM][TN] = {0.}; // 每个线程负责TM*TN个元素，则需要申请TM*TN个寄存器保存累加值，额外的一个寄存器用于缓存；
-#pragma unroll
+    A = &A[bm * BM * K];
+    B = &B[bn * BN];
+    C = &C[bm * BM * N + bn * BN];
     for (int k = 0; k < K; k += BK) {
-#pragma unroll
-        for (int i = 0; i < BM; i += a_tile_stride) {
-            As[(a_tile_row + i) * BK + a_tile_col] = A[(a_tile_row + i) * K + a_tile_col];
-        }
-#pragma unroll
-        for (int i = 0; i < BK; i += b_tile_stride) {
-            Bs[(b_tile_row + i) * BN + b_tile_col] = B[(b_tile_row + i) * N + b_tile_col];
-        }
-        __syncthreads();
-        A += BK;
-        B += BK * N;
-#pragma unroll
-        for (int i = 0; i < BK; i++) {
-#pragma unroll
-            for (int j = 0; j < TM; j++) {
-                for (int l = 0; l < TN; l++)
-                    tmp[j][l] += As[(ty + j) * BK + i] * Bs[tx + l + i * BN];
+        // 缓存As 和 Bs
+        for (int i = 0; i < TM; i++) {
+            for (int j = 0; j < BK*TN/BN; j++) {
             }
         }
+        // 同步所有线程缓存完成
+        __syncthreads();  // 同步同一个线程块(block)中的线程，执行到同一个点
+        // 移动A,B指针到下一个矩阵块
+        A += BK;
+        B += BK * N;
+        for (int i = 0; i < BK; i++) {
+            tmp[tm][tn] += As[ty * BK + i] * Bs[i * BN + tx];
+        }
+        // FMA计算需要读取缓存数据，在新一轮写入缓存前进行同步，确保所有线程计算完成
         __syncthreads();
     }
-#pragma unroll
-    for (int j = 0; j < TM; j++) {
-        for (int l = 0; l < TN; l++)
-            C[(ty + j) * N + tx + l] = alpha * tmp[j][l] + beta * C[(ty + j) * N + tx + l];
-    }
+    for ()
+
+    float tmp[TM][TN] = {0.}; // 每个线程负责TM*TN个元素，则需要申请TM*TN个寄存器保存累加值，额外的一个寄存器用于缓存；
+
 }
 
 // template instantiation declaration
 // template __global__ void sgemm_v4<128, 128, 8, 8, 8>(int M, int N, int K, float alpha, float *A, float *B, float beta, float *C);
 
 int main(){
-    const int N = 1024;
-    const int M = 1024;
+    const int N = 1024*32;
+    const int M = 1024*32;
     const int K = 128;
     const int repeat = 10;
     float *h_A, *h_B, *h_C;
@@ -183,16 +159,34 @@ int main(){
     cudaMalloc(&d_C, N*M*sizeof(float));
     cudaMemcpy(d_A, h_A, N*K*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_B, h_B, K*M*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_C, h_C, N*M*sizeof(float), cudaMemcpyHostToDevice);
     
-    //一个block处理tileC (BM,BN)
-    const int BM = 32;
-    const int BN = 32;
-    const int BK = 32;
-    dim3 blockDim(BM, BN);
-    dim3 gridDim(CEIL(M, BM), CEIL(N, BN));
+    //test sgemm_v4<128, 128, 8, 8, 8>
+    const int BM = 128;
+    const int BN = 128;
+    const int BK = 8;
+    const int TM = 8;
+    const int TN = 8;
+    dim3 blockDim(CEIL(BN, TN), CEIL(BM, TM));
+    dim3 gridDim( CEIL(N, BN), CEIL(M, BM));
+    sgemm_v4<BM,BN,BK,TM,TN><<<gridDim, blockDim>>>(M, N, K, 1.0f, d_A, d_B, 0.0f, d_C);
+    // test accuracy
+    cudaMemcpy(h_C, d_C, N*M*sizeof(float), cudaMemcpyDeviceToHost);
+    for(int i = 0; i < N*M; i++){
+        if(h_C[i] != K){
+            printf("error at %d, expect %f, get %f\n", i, K*1.0, h_C[i]);
+            break;
+        }
+    }
+    printf("%f\n", TIME_RECORD(repeat, ([&]{sgemm_v4<BM,BN,BK,TM,TN><<<gridDim, blockDim>>>(M, N, K, 1.0f, d_A, d_B, 0.0f, d_C);})));
+    
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+    free(h_A);
+    free(h_B);
+    free(h_C);
 
-    gemm_threadblock_tile<BM,BN,BK><<<gridDim, blockDim>>>(d_A, d_B, d_C, N, M, K);
-    
 }
 
 
